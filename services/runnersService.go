@@ -3,6 +3,8 @@ package services
 import (
 	"net/http"
 	"runner/models"
+	"strconv"
+	"time"
 )
 
 type RunnersService struct {
@@ -12,8 +14,8 @@ type RunnersService struct {
 
 func NewRunnersService(
 	runnersRepository *repositories.RunnersRepository,
-	resultsRepository *repositories.ResultsRepository) RunnersService {
-	return RunnersService{
+	resultsRepository *repositories.ResultsRepository) *RunnersService {
+	return &RunnersService{
 		runnersRepository: runnersRepository,
 		resultsRepository: resultsRepository,
 	}
@@ -75,4 +77,65 @@ func (rs RunnersService) UpdateRunner(runner *models.Runner) *models.ResponseErr
 	if responseErr != nil {
 		return responseErr
 	}
+	return rs.runnersRepository.UpdateRunner(runner)
+}
+
+func (rs RunnersService) DeleteRunner(runnerID string) *models.ResponseError {
+	responseErr := validateRunnerID(runnerID)
+	if responseErr != nil {
+		return responseErr
+	}
+	return rs.runnersRepository.DeleteRunner(runnerID)
+}
+
+func (rs RunnersService) GetRunner(runnerID string) (*models.Runner, *models.ResponseError) {
+	responseErr := validateRunnerID(runnerID)
+	if responseErr != nil {
+		return nil, responseErr
+	}
+	runner, responseErr := rs.runnersRepository.GetRunner(RunnerID)
+	if responseErr != nil {
+		return nil, responseErr
+	}
+	results, responseErr := rs.resultsRepository.GetAllRunnersResults(RunnerID)
+	if responseErr != nil {
+		return nil, responseErr
+	}
+	runners.Results = results
+	return runner, nil
+}
+
+//GetRunnersBatch:
+//1.Get all runners
+//2.Get the top 10 runners of the country
+//3.Get the top 10 runners of the current year
+
+func (rs RunnersService) GetRunnersBatch(country string, year string) (*[]models.Runner, *models.ResponseError) {
+	if country == "" && year == "" {
+		return nil, &models.ResponseError{
+			Message: "Only one parameter can be passed",
+			Status:  http.StatusBadRequest,
+		}
+	}
+	if country != "" {
+		return rs.runnersRepository.GetRunnersByCountry(country)
+	}
+	if year != "" {
+		intYear, err := strconv.Atoi(year)
+		if err != nil {
+			return nil, &models.ResponseError{
+				Message: "Invalid year",
+				Status:  http.StatusBadRequest,
+			}
+		}
+		currentYear := time.Now().Year()
+		if intYear < 0 || intYear > currentYear {
+			return nil, &models.ResponseError{
+				Message: "Invalid year",
+				Status:  http.StatusBadRequest,
+			}
+		}
+		return rs.runnersRepository.GetRunnersByYear(intYear)
+	}
+	return rs.runnersRepository.GetAllRunners
 }
